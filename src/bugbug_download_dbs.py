@@ -161,4 +161,4 @@ def main():
     download(BUGS_DB)
 
 if __name__ == "__main__":
-    main()
+    #main() TODO

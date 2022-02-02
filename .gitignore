@@ -1,4 +1,9 @@
 data/
+utils/SZZUnleashed/
+utils/fast-export/
+utils/authors.txt
+test.py
+
 # VSCode
 .vscode/*
 !.vscode/settings.json
