@@ -136,8 +136,15 @@ def filter_files_revs_history_for_main(orig_files_revs_history, commit_log):
     return files_revs_history
 
 def get_modified_files(files_revs_history, index_to_file, rev_index):
-    return index_to_file[files_revs_history[:,rev_index].nonzero()[0]]
-        
+    return sorted(index_to_file[files_revs_history[:,rev_index].nonzero()[0]])
+
+def get_revisions_for_file_index(files_revs_history, file_index):
+    return sorted(files_revs_history[file_index, :].nonzero()[1])
+
+def get_revisions_for_file(files_revs_history, file_to_index, file):
+    return get_revisions_for_file_index(files_revs_history, file_to_index[file])
+
+
         
    
    

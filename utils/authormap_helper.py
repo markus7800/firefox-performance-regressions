@@ -37,8 +37,8 @@ with open('authors.txt') as f:
 
 with open(f'authormap.txt') as f:
     for line in f:
-    	name = line.partition('"="')[0][1:]
-    	names[name] = 2
+        name = line.partition('"="')[0][1:]
+        names[name] = 2
 
 
 

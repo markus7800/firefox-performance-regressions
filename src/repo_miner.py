@@ -10,12 +10,8 @@ import shutil
 from joblib import Parallel, delayed
 
 from src.statlog_parser import *
+from src.labeling import *
 from src.utils import *
-
-
-def make_directory(directory):
-    if not os.path.exists(directory):
-        os.makedirs(directory)
         
 # export raw content from file with file_index at revision with rev_index
 def cat_file(file_history_dir, repo_path, index_to_file, file_index, rev_index):
@@ -30,10 +26,9 @@ def cat_file(file_history_dir, repo_path, index_to_file, file_index, rev_index):
                        capture_output=True,
                        shell=True).stdout
         
-        if file_txt != '':
-            with open(write_to, 'w', encoding='utf-8') as f:
-                s = file_txt.decode('utf-8', 'ignore')
-                f.write(s)
+        with open(write_to, 'w', encoding='utf-8') as f:
+            s = file_txt.decode('utf-8', 'ignore')
+            f.write(s)
 
 # export diff for revision with rev_index         
 def diff_commit(diff_dir, repo_path, rev_index):
@@ -173,23 +168,26 @@ class RepoMiner:
             name, extension = os.path.splitext(file)
             rev_index = int(name)
             if rev_index not in commit_rev_ids_set:
-                to_delete_set.add(rev_index)
+                to_delete_set.add(file)
 
             commit_rev_ids_set.discard(rev_index)
 
         return commit_rev_ids_set, to_delete_set
             
-    def run_diff_commits(self, commit_rev_ids_set, n_jobs=0):
+    def run_diff_commits(self, commit_rev_ids_set, n_jobs=0, delete=False):
         print('Running diff_commits ... ')
         make_directory(self.diff_dir)
         print(f'{len(commit_rev_ids_set)} revs to diff.')
         filtered_commit_rev_ids_set, to_delete_set = self.filter_for_existing_diff_files(commit_rev_ids_set.copy())
         print(f'{len(filtered_commit_rev_ids_set)} revs to diff after filtering for existing files.')
-        print(f'{len(to_delete_set)} revs could be deleted.')
+        print(f'{len(to_delete_set)} revs can be deleted.')
         
         if n_jobs > 0:
             Parallel(n_jobs=n_jobs)(delayed(diff_commit)(self.diff_dir, self.repo_path, rev_id) for rev_id in tqdm(filtered_commit_rev_ids_set, desc='Extract diffs'))
-        
+            if delete:
+                for file in tqdm(to_delete_set, desc='deleting files'):
+                    os.remove(os.path.join(self.diff_dir, file))
+
     
     # construct (file_index, rev_index)
     def get_cat_indexes(self, filtered_file_index_set, commit_rev_ids_set):
@@ -224,10 +222,10 @@ class RepoMiner:
         if append and os.path.isfile(os.path.join(self.output_path, 'complexity_metrics.csv')):
             prev_complexity_metrics_df = self.read_complexity_metrics()
             for (i, row) in tqdm(prev_complexity_metrics_df.iterrows(), desc='filter for existing files from complexity metrics df'):
-                rev_index, file_index = i
+                rev_index, file_name = i
 
-                cat_indexes.discard((file_index, rev_index))
-                before_revs.discard((file_index, rev_index))
+                cat_indexes.discard((self.file_to_index[file_name], rev_index))
+                before_revs.discard((self.file_to_index[file_name], rev_index))
         
         for file in tqdm(os.listdir(self.file_history_dir), desc='filter for existing files from file history dir'):
             name, extension = os.path.splitext(file)
@@ -238,23 +236,8 @@ class RepoMiner:
             cat_indexes.discard((file_index, rev_index))
             before_revs.discard((file_index, rev_index))
     
-    def get_files_to_delete(self, cat_indexes, before_revs):
-        to_delete = set()
-        for file in tqdm(os.listdir(self.file_history_dir), desc='get files to delete'):
-            name, extension = os.path.splitext(file)
-            rev_index, _, file_index = name.partition('_')
-            rev_index = int(rev_index)
-            file_index = int(file_index)
-            entry = (file_index, rev_index)
-            if entry not in cat_indexes and entry not in before_revs:
-                to_delete.add(file)
-        return to_delete
     
-    def delete_cat_files(self, to_delete):
-        for file in tqdm(to_delete, desc='deleting files'):
-            os.remove(os.path.join(self.file_history_dir, file))
-    
-    def run_cat_files(self, file_type_whitelist, commit_rev_ids_set, update=False, n_jobs=0, delete=False, append=True):
+    def run_cat_files(self, file_type_whitelist, commit_rev_ids_set, n_jobs=0, append=True):
         print('Running cat_files ...')
         self.file_type_whitelist = file_type_whitelist
         
@@ -267,30 +250,8 @@ class RepoMiner:
                 
         make_directory(self.file_history_dir)
         
-        
-        if os.path.isfile(os.path.join(self.output_path, 'file_index.txt')):
-            if not update:
-                print('There already seems to be a file history stored. Abort. Set update=True if you want to update the data.')
-                return
-            else:
-                old_file_index = read_data_from_json(os.path.join(self.output_path, 'file_index.txt'))
-                mismatches = sum(k in old_file_index and old_file_index[k] != v for k,v in self.file_to_index.items())
-                missings = sum(k not in old_file_index for k,v in self.file_to_index.items())
-                if not old_file_index == self.file_to_index:
-                    print(f'File indexes do not match ({mismatches} mismatches, {missings} missings)')
-                    if mismatches == 0:
-                        print('But no mismatches -> replace index.')
-                    else:
-                        print('Abort.')
-                        # TODO: renaming
-                        return
-        
-        
-        write_json_to_file(self.file_to_index, os.path.join(self.output_path, 'file_index.txt'))
-        
         filtered_file_index = np.array([v for k,v in self.file_to_index.items() if os.path.splitext(k)[1] in file_type_whitelist])
         filtered_file_index_set = set(filtered_file_index)
-        
         
         
         cat_indexes = self.get_cat_indexes(filtered_file_index_set, commit_rev_ids_set)
@@ -299,13 +260,6 @@ class RepoMiner:
         
         before_revs = self.get_before_revs(commit_rev_ids_set, cat_indexes)
         print(f'Found {len(before_revs)} before revs.')
-        
-        # delete unnused files
-        to_delete = self.get_files_to_delete(cat_indexes, before_revs)
-        print(f'{len(to_delete)} files can be deleted.')
-        if delete:
-            self.delete_cat_files(to_delete)
-        
         
         self.filter_for_existing_files(cat_indexes, before_revs, append)
         print(f'After filtering for existing files: {len(cat_indexes)} files to cat.')
@@ -320,12 +274,41 @@ class RepoMiner:
     
     def read_complexity_metrics(self):
         complexity_metrics = pd.read_csv(os.path.join(self.output_path, 'complexity_metrics.csv'))
-        complexity_metrics = complexity_metrics.set_index(['rev_index', 'file_index'])
+        complexity_metrics = complexity_metrics.set_index(['rev_index', 'file_name'])
         complexity_metrics = complexity_metrics.sort_index()
         return complexity_metrics
             
-    
-    def write_complexity_metrics(self, append=True):
+    def remove_redundant_from_complexity_metrics(self, file_type_whitelist, commit_rev_ids_set):
+        filtered_file_index = np.array([v for k,v in self.file_to_index.items() if os.path.splitext(k)[1] in file_type_whitelist])
+        filtered_file_index_set = set(filtered_file_index)
+        
+        cat_indexes = self.get_cat_indexes(filtered_file_index_set, commit_rev_ids_set)
+        n_files = len({file_index for file_index, rev_index in cat_indexes})
+        print(f'Found {len(cat_indexes)} files to cat ({n_files} unique files).')
+        
+        before_revs = self.get_before_revs(commit_rev_ids_set, cat_indexes)
+        print(f'Found {len(before_revs)} before revs.')
+        print(f'Total {len(cat_indexes) + len(before_revs)}.')
+
+        indexes = cat_indexes.union(before_revs)
+
+        prev_complexity_metrics_df = self.read_complexity_metrics()
+
+        df_index = {(rev_index, self.index_to_file[file_index]) for (file_index, rev_index) in indexes}
+        df_index = list(df_index.intersection(set(prev_complexity_metrics_df.index)))
+
+
+        new_complexity_metrics_df = prev_complexity_metrics_df.loc[df_index, :]
+        new_complexity_metrics_df = new_complexity_metrics_df.sort_index()
+        
+        print(f'Old size {len(prev_complexity_metrics_df)}, new size: {len(new_complexity_metrics_df)}, diff: {len(prev_complexity_metrics_df) - len(new_complexity_metrics_df)}')
+        print(len(cat_indexes) + len(before_revs) - len(new_complexity_metrics_df), 'left to compute.')
+        new_complexity_metrics_df.to_csv(os.path.join(self.output_path, 'complexity_metrics.csv'), index=True)
+
+
+    def write_complexity_metrics(self, append=True): 
+        print('Write complexity metrics ...')
+
         complexity_metrics = []
         for file in tqdm(os.listdir(self.file_metrics_dir)):
             _file = file[:-5] # remove .json
@@ -338,16 +321,31 @@ class RepoMiner:
             flat_metrics = {name + '_' + k: v for name, group in d['metrics'].items() for k,v in group.items()}
 
             row = {'rev_index': rev_index,
-                   'file_index': file_index,
                    'file_name': self.index_to_file[file_index],
                    'extension': extension}
 
             row = {**row, **flat_metrics}
 
             complexity_metrics.append(row)
+        
+        files_with_metrics = set(os.listdir(self.file_metrics_dir))
+        for file in tqdm(os.listdir(self.file_history_dir)):
+            # correspond to files that are deleted or tool could not parse file -> leave metrics empty
+            if (file + '.json') not in files_with_metrics:
+                file_name, extension = os.path.splitext(file)
+                rev_index, file_index = file_name.split('_')[-2:]
+                rev_index = int(rev_index)
+                file_index = int(file_index)
+                
+                row = {'rev_index': rev_index,
+                    'file_name': self.index_to_file[file_index],
+                    'extension': extension}
+                    
+                complexity_metrics.append(row)
     
         complexity_metrics_df = pd.DataFrame(complexity_metrics)
-        complexity_metrics_df = complexity_metrics_df.set_index(['rev_index', 'file_index'])
+        complexity_metrics_df = complexity_metrics_df.set_index(['rev_index', 'file_name'])
+
         if append:
             prev_complexity_metrics_df = self.read_complexity_metrics()
             complexity_metrics_df = prev_complexity_metrics_df.append(complexity_metrics_df)
@@ -358,6 +356,7 @@ class RepoMiner:
         complexity_metrics_df.to_csv(os.path.join(self.output_path, 'complexity_metrics.csv'), index=True)
               
     def compute_complexity_metrics(self, n_jobs=4):
+        print('Compute complexity metrics ...')
         make_directory(self.file_metrics_dir)
         
         res = subprocess.run(f'rust-code-analysis-cli -m -p {self.file_history_dir} -O json -o {self.file_metrics_dir} -j {n_jobs}',
@@ -365,27 +364,48 @@ class RepoMiner:
 
 
     def remove_file_history_folder(self):
-        shutil.rmtree(self.file_metrics_dir)
+        if os.path.exists(self.file_history_dir):
+            shutil.rmtree(self.file_history_dir)
               
     def remove_file_metrics_folder(self):
-        shutil.rmtree(self.file_metrics_dir)
+        if os.path.exists(self.file_metrics_dir):
+            shutil.rmtree(self.file_metrics_dir)
         
         
 if __name__ == "__main__":
     repominer = RepoMiner(repo_path='data/mozilla-central', output_path='data/repo_miner')
 
     repominer.run_commit_log()
-
     commit_log = repominer.read_commit_log()
     print(f'commit_log with {len(commit_log)} rows.')
 
-    repominer.update_statlog(commit_log)
 
+    repominer.update_statlog(commit_log)
     repominer.read_statlog()
 
-    # commit_rev_ids_set = 
+    selected_commits = get_selected_commits()
+    print(f'Selected {len(selected_commits)} commits')
 
-    # repominer.run_diff_commits(commit_rev_ids_set. n_jobs=0)
+
+    commit_rev_ids_set = set(commit_log.join(selected_commits[['bug_id']], how='inner')['id'])
+    if len(commit_rev_ids_set) == len(selected_commits):
+        print('Found all selected_commits in commit_log.')
+    else:
+        print('Did not find all selected_commits in commit_log. data/bugbug/commits.json and the local repository are not synchronised.')
+
+
+    repominer.run_diff_commits(commit_rev_ids_set, n_jobs=4, delete=True)
+
+    file_type_whitelist = set(['.rs', '.js', '.cxx', '.cpp', '.py', '.c', '.cc', '.ts'])
+    repominer.run_cat_files(file_type_whitelist, commit_rev_ids_set, n_jobs=4, append=True)
+
+    repominer.compute_complexity_metrics()
+    repominer.write_complexity_metrics(append=True)
+
+    repominer.remove_file_history_folder()
+    repominer.remove_file_metrics_folder()
+
+    # repominer.remove_redundant_from_complexity_metrics(file_type_whitelist, commit_rev_ids_set)
         
         
         
