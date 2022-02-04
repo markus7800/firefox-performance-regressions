@@ -373,15 +373,15 @@ class RepoMiner:
         
         
 if __name__ == "__main__":
-    repominer = RepoMiner(repo_path='data/mozilla-central', output_path='data/repo_miner')
+    repo_miner = RepoMiner(repo_path='data/mozilla-central', output_path='data/repo_miner')
 
-    repominer.run_commit_log()
-    commit_log = repominer.read_commit_log()
+    repo_miner.run_commit_log()
+    commit_log = repo_miner.read_commit_log()
     print(f'commit_log with {len(commit_log)} rows.')
 
 
-    repominer.update_statlog(commit_log)
-    repominer.read_statlog()
+    repo_miner.update_statlog(commit_log)
+    repo_miner.read_statlog()
 
     selected_commits = get_selected_commits()
     print(f'Selected {len(selected_commits)} commits')
@@ -394,18 +394,18 @@ if __name__ == "__main__":
         print('Did not find all selected_commits in commit_log. data/bugbug/commits.json and the local repository are not synchronised.')
 
 
-    repominer.run_diff_commits(commit_rev_ids_set, n_jobs=4, delete=True)
+    repo_miner.run_diff_commits(commit_rev_ids_set, n_jobs=4, delete=True)
 
     file_type_whitelist = set(['.rs', '.js', '.cxx', '.cpp', '.py', '.c', '.cc', '.ts'])
-    repominer.run_cat_files(file_type_whitelist, commit_rev_ids_set, n_jobs=4, append=True)
+    repo_miner.run_cat_files(file_type_whitelist, commit_rev_ids_set, n_jobs=4, append=True)
 
-    repominer.compute_complexity_metrics()
-    repominer.write_complexity_metrics(append=True)
+    repo_miner.compute_complexity_metrics()
+    repo_miner.write_complexity_metrics(append=True)
 
-    repominer.remove_file_history_folder()
-    repominer.remove_file_metrics_folder()
+    repo_miner.remove_file_history_folder()
+    repo_miner.remove_file_metrics_folder()
 
-    # repominer.remove_redundant_from_complexity_metrics(file_type_whitelist, commit_rev_ids_set)
+    # repo_miner.remove_redundant_from_complexity_metrics(file_type_whitelist, commit_rev_ids_set)
         
         
         

@@ -140,7 +140,8 @@ def download(path, support_files_too=False, extract=True):
         return False
 
 
-def main():
+
+if __name__ == "__main__":
     COMMITS_DB = "data/bugbug/commits.json"
     COMMIT_EXPERIENCES_DB = "commit_experiences.lmdb.tar.zst"
     register(
@@ -157,8 +158,6 @@ def main():
         7,
     )
 
-    download(COMMITS_DB)
-    download(BUGS_DB)
-
-if __name__ == "__main__":
-    #main() TODO
+    # TODO
+    # download(COMMITS_DB)
+    # download(BUGS_DB)

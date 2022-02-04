@@ -3,7 +3,7 @@ utils/SZZUnleashed/
 utils/fast-export/
 utils/authors.txt
 test.py
-test2.py
+test*.py
 
 # VSCode
 .vscode/*
