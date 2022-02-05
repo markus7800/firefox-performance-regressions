@@ -28,13 +28,6 @@ import sklearn.metrics as metrics
 
 from tqdm import tqdm
 
-def default_pipeline():
-    return Pipeline([
-        ('scaler', MinMaxScaler()),
-        ('sampler', None),
-        ('model', None)   
-    ])
-
 def print_classification_report(opt, X_train, X_test, y_train, y_test):
     print('Train:')
     y_hat = opt.predict(X_train)
@@ -125,6 +118,14 @@ def save_tpot_resuls(opt, path):
     write_json_to_file({k: str(v) for k,v in opt.pareto_front_fitted_pipelines_.items()}, path + '_tpot_pareto_front.json')
     opt.export(path + '_tpot_exported_pipeline.py')
 
+
+def default_pipeline():
+    return Pipeline([
+        ('scaler', MinMaxScaler()),
+        ('sampler', None),
+        ('model', None)   
+    ])
+
 def imbalanced_search_space():
     return {
         'sampler': Categorical([
@@ -156,19 +157,18 @@ def svm_search_space():
     return {
         'model': Categorical([LinearSVC(random_state=0)]),
         'model__C': Real(1e-4, 1e+3, 'log-uniform'),
-        'model__penalty': Categorical(['l1', 'l2']),
         'kernel__kernel': Categorical(['linear', 'rbf', 'poly']),
-        'kernel__gamma': Categorical(['scale']),
+        'kernel__gamma': Categorical([None]),
         'kernel__degree': Categorical([3, 5])
     }
 
 
 def mlp_search_space():
     return {
-        'model': Categorical([MLPClassifier(random_state=0)]),
+        'model': Categorical([MLPClassifier(random_state=0, max_iter=1000)]),
         'model__alpha': Real(1e-4, 1e+3, 'log-uniform'),
         'model__learning_rate_init': Real(1e-4, 1e-1, 'log-uniform'),
-        'model__hidden_layer_sizes': Categorical([(10,), (20,), (50,), (100,), (200,)]),
+        'model__hidden_layer_sizes': Categorical([10, 20, 50, 100, 200]),
         'model__activation': Categorical(['relu', 'logistic', 'tanh'])
     }
 
@@ -185,7 +185,7 @@ def random_forest_search_space():
 def xgboost_search_space():
     return {
         'model': Categorical([xgboost.XGBClassifier(random_state=0, n_jobs=4, use_label_encoder=False, eval_metric='logloss')]),
-        'model__max_depth': Integer([3, 10]),
+        'model__max_depth': Integer(3, 10),
         'model__min_child_weight': Categorical([1, 2, 5]),
         'model__max_delta_step': Categorical([0, 1]),
         'model__n_estimators': Integer(5,150),
