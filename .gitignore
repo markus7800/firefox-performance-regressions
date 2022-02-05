@@ -1,7 +1,11 @@
 data/
+
+experiments/results
+
 utils/SZZUnleashed/
 utils/fast-export/
 utils/authors.txt
+
 test.py
 test*.py
 
@@ -35,6 +39,7 @@ creds.js
 *.tsv
 *.tsv.gz
 *.xlsx
+*.zip
  
  
 # Mac/OSX
