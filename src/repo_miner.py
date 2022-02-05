@@ -3,7 +3,6 @@ import pandas as pd
 import os
 import os.path
 from tqdm import tqdm
-import json
 import subprocess
 import shutil
 
