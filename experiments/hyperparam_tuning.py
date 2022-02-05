@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import json
 
 from imblearn.under_sampling import RandomUnderSampler
 from imblearn.over_sampling import RandomOverSampler, SMOTE
@@ -34,6 +35,14 @@ def default_pipeline():
         ('model', None)   
     ])
 
+def print_classification_report(opt, X_train, X_test, y_train, y_test):
+    print('Train:')
+    y_hat = opt.predict(X_train)
+    print(metrics.classification_report(y_train, y_hat))
+    print('Test:')
+    y_hat = opt.predict(X_test)
+    print(metrics.classification_report(y_test, y_hat))
+
 def bayes_opt(X_train, X_test, y_train, y_test,
               pipeline, model_search_space, imbalanced_search_space, n_iter, scoring='f1', n_jobs=-1):
     search_spaces = {
@@ -43,6 +52,7 @@ def bayes_opt(X_train, X_test, y_train, y_test,
     print('Search Spaces:')
     for name, values in search_spaces.items():
         print(f'{name}: {values}')
+    print()
                       
     # time splits same proportions as train/test
     y_test_proportion = len(y_test) / (len(y_train) + len(y_test))
@@ -66,13 +76,8 @@ def bayes_opt(X_train, X_test, y_train, y_test,
         opt.fit(X_train, y_train, callback=on_step)
 
         print(f'best val. score {opt.best_score_}')
-        
-        print('Train:')
-        y_hat = opt.predict(X_train)
-        print(metrics.classification_report(y_train, y_hat))
-        print('Test:')
-        y_hat = opt.predict(X_test)
-        print(metrics.classification_report(y_test, y_hat))
+
+        print_classification_report(opt, X_train, X_test, y_train, y_test)
         
         print('Best parameters:')
         print(opt.best_params_)
@@ -91,9 +96,43 @@ def save_cv_results(opt, path):
 
     res.to_csv(path)
 
+def tpot_opt(X_train, X_test, y_train, y_test, n_iter, scoring='f1', n_jobs=-1):
+    from tpot import TPOTClassifier
+
+    y_test_proportion = len(y_test) / (len(y_train) + len(y_test))
+    tscv = TimeSeriesSplit(n_splits=5, test_size=round(len(y_train) * y_test_proportion))
+    opt = TPOTClassifier(generations=n_iter, population_size=100,
+                            cv=tscv, scoring=scoring,
+                            random_state=0, verbosity=3,
+                            n_jobs=n_jobs)
+    opt.fit(X_train, y_train)
+
+    cv_scores = [(name, info['internal_cv_score']) for name, info in opt.evaluated_individuals_.items()]
+    cv_scores = sorted(cv_scores, key=lambda p: -p[1])
+
+    print(f'best val. score {cv_scores[0][1]}')
+
+    print_classification_report(opt, X_train, X_test, y_train, y_test)
+
+    return opt
+
+def save_tpot_resuls(opt, path):
+    def write_json_to_file(data, filename):
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+
+    write_json_to_file(opt.evaluated_individuals_, path + '_tpot_evaluated_individuals.json')
+    write_json_to_file({k: str(v) for k,v in opt.pareto_front_fitted_pipelines_.items()}, path + '_tpot_pareto_front.json')
+    opt.export(path + '_tpot_exported_pipeline.py')
+
 def imbalanced_search_space():
     return {
-        'sampler': Categorical([None, RandomUnderSampler(), RandomOverSampler(), SMOTE()])
+        'sampler': Categorical([
+            None,
+            RandomUnderSampler(random_state=0),
+            RandomOverSampler(random_state=0),
+            SMOTE(random_state=0)
+        ])
         #'model__class_weight': Categorical([None, 'balanced']) MLP does not have, xgboost has scale_pos_weight
     }
         
@@ -119,7 +158,7 @@ def svm_search_space():
         'model__C': Real(1e-4, 1e+3, 'log-uniform'),
         'model__penalty': Categorical(['l1', 'l2']),
         'kernel__kernel': Categorical(['linear', 'rbf', 'poly']),
-        'kernel__gamme': Categorical(['scale']),
+        'kernel__gamma': Categorical(['scale']),
         'kernel__degree': Categorical([3, 5])
     }
 
@@ -128,7 +167,7 @@ def mlp_search_space():
     return {
         'model': Categorical([MLPClassifier(random_state=0)]),
         'model__alpha': Real(1e-4, 1e+3, 'log-uniform'),
-        'model__learning_rate': Real(1e-4, 1e-1, 'log-uniform'),
+        'model__learning_rate_init': Real(1e-4, 1e-1, 'log-uniform'),
         'model__hidden_layer_sizes': Categorical([(10,), (20,), (50,), (100,), (200,)]),
         'model__activation': Categorical(['relu', 'logistic', 'tanh'])
     }
@@ -179,7 +218,8 @@ def get_bugbug_buglevel(target):
     X = features.fillna(0).drop('target', axis=1)
     X = X.drop([c for c in X.columns if 'delta' in c], axis=1, errors='ignore')
     X = np.array(X)
-    print(f'{X.shape=}')
+    print(f'{X.shape=}\n')
+
     return X, y
 
 
@@ -193,29 +233,62 @@ if __name__ == '__main__':
         os.makedirs(output_dir)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--n_iter', type=int, dest='n_iter', default=10,
+    parser.add_argument('--n_iter', type=int, dest='n_iter', default=100,
         help='Number of samples per model.')
 
-    parser.add_argument('--n_jobs', type=int, dest='n_jobs', default=-1,
+    parser.add_argument('--n_jobs', type=int, dest='n_jobs', default=5,
         help='Number of parallel jobs.')
 
     parser.add_argument('--target', type=str, dest='target', default='performance',
         help='Classification target.')
 
-    args = parser.parse_args(sys.argv[1:])
-    print(f'{args.n_iter=}, {args.n_jobs=}, {args.target=}')
+    parser.add_argument('--model', type=str, dest='model', default='lr',
+        help='Select model to perform hyperparameter tuning.')
 
-    X, y = get_bugbug_buglevel(args.target)
+    parser.add_argument('--data', type=str, dest='data', default='bugbug_buglevel',
+        help='Choice of labeling and data.')
+
+
+    args = parser.parse_args(sys.argv[1:])
+    print(f'\n{args.n_iter=}, {args.n_jobs=}, {args.target=}, {args.model=}, {args.data=}\n')
+
+    data_map = {
+        'bugbug_buglevel': get_bugbug_buglevel
+    }
+    assert args.data in data_map.keys(), f'Unknown data and labeling {args.data=}.'
+
+    X, y = data_map[args.data](args.target)
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, shuffle=False)
 
-    # %%
-    opt = bayes_opt(X_train, X_test, y_train, y_test,
-                    pipeline=default_pipeline(),
-                    model_search_space=logistic_regression_search_space(),
-                    imbalanced_search_space=imbalanced_search_space(),
-                    n_iter=args.n_iter,
-                    scoring='roc_auc',
-                    n_jobs=args.n_jobs)
+    search_space_map = {
+        'lr': logistic_regression_search_space,
+        'svm': svm_search_space,
+        'mlp': mlp_search_space,
+        'rf': random_forest_search_space,
+        'xgb': xgboost_search_space,
+    }
+    
+    if args.model == 'tpot':
+        opt = tpot_opt(X_train, X_test, y_train, y_test,
+                n_iter=args.n_iter,
+                scoring='roc_auc',
+                n_jobs=args.n_jobs)
+        
+        save_tpot_resuls(opt, os.path.join(output_dir, f'{args.data}_{args.target}'))
 
-    save_cv_results(opt, os.path.join(output_dir, 'logistic_regression.csv'))
+    else:
+        args.model in search_space_map.keys(), f'Invalid model {args.model}.'
+
+        pipeline = default_pipeline if args.model != 'svm' else svm_pipeline
+
+        # %%
+        opt = bayes_opt(X_train, X_test, y_train, y_test,
+                        pipeline=pipeline(),
+                        model_search_space=search_space_map[args.model](),
+                        imbalanced_search_space=imbalanced_search_space(),
+                        n_iter=args.n_iter,
+                        scoring='roc_auc',
+                        n_jobs=args.n_jobs)
+
+        save_cv_results(opt, os.path.join(output_dir, f'{args.data}_{args.target}_{args.model}.csv'))
