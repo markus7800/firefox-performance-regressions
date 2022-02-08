@@ -206,7 +206,7 @@ def get_bugbug_buglevel(target):
     labeling
 
     # %%
-    features['target'] = labeling[target]
+    features['target'] = labeling[target] # works because index is revision hash
     assert features['first_id'].is_monotonic_increasing
     features = features.drop(['first_revision', 'first_id', 'revisions', 'ids'], axis=1)
 
