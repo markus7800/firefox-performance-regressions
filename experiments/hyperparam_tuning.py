@@ -32,9 +32,12 @@ def print_classification_report(opt, X_train, X_test, y_train, y_test):
     print('Train:')
     y_hat = opt.predict(X_train)
     print(metrics.classification_report(y_train, y_hat))
+    print('Score:', opt.score(X_train, y_train))
+
     print('Test:')
     y_hat = opt.predict(X_test)
     print(metrics.classification_report(y_test, y_hat))
+    print('Score:', opt.score(X_test, y_test))
 
 def bayes_opt(X_train, X_test, y_train, y_test,
               pipeline, model_search_space, imbalanced_search_space, n_iter, scoring='f1', n_jobs=-1):
@@ -139,7 +142,7 @@ def imbalanced_search_space():
         
 def logistic_regression_search_space():
     return {
-        'model': Categorical([LogisticRegression(random_state=0, max_iter=1000, solver='saga')]),
+        'model': Categorical([LogisticRegression(random_state=0, solver='saga')]),
         'model__C': (1e-4, 1e+3, 'log-uniform'),
         'model__penalty': Categorical(['l1', 'l2']),
     }
@@ -165,7 +168,7 @@ def svm_search_space():
 
 def mlp_search_space():
     return {
-        'model': Categorical([MLPClassifier(random_state=0, max_iter=1000)]),
+        'model': Categorical([MLPClassifier(random_state=0)]),
         'model__alpha': Real(1e-4, 1e+3, 'log-uniform'),
         'model__learning_rate_init': Real(1e-4, 1e-1, 'log-uniform'),
         'model__hidden_layer_sizes': Categorical([10, 20, 50, 100, 200]),
@@ -176,7 +179,7 @@ def mlp_search_space():
 def random_forest_search_space():
     return {
         'model': Categorical([RandomForestClassifier(random_state=0)]),
-        'model__max_depth': Categorical([None, 5, 10, 20, 50]),
+        'model__max_depth': Categorical([None, 3, 5, 10, 15, 20]),
         'model__min_samples_split': Categorical([2, 5]),
         'model__n_estimators': Integer(5,150)
     }
@@ -216,7 +219,7 @@ def get_bugbug_buglevel(target):
     # %%
     y = np.array(features['target'])
     X = features.fillna(0).drop('target', axis=1)
-    X = X.drop([c for c in X.columns if 'delta' in c], axis=1, errors='ignore')
+    # X = X.drop([c for c in X.columns if 'delta' in c], axis=1, errors='ignore')
     X = np.array(X)
     print(f'{X.shape=}\n')
 
