@@ -3,7 +3,11 @@ import json
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import pandas as pd
-
+import subprocess
+from collections import defaultdict
+import argparse
+import sys
+import copy
 
 def get_selected_commits():
     def is_wptsync(commit):
@@ -136,32 +140,18 @@ def bug_to_types(bug):
         )
     )
 
-def get_regressor_and_fix_bug_ids_by_kind():
-    regressor_bug_ids_by_kind = {
-        'security': [],
-        'memory': [],
-        'crash': [],
-        'performance': [],
-        'power': [],
-        'regression': []
-        }
-    fix_bug_ids_by_kind = {
-        'security': [],
-        'memory': [],
-        'crash': [],
-        'performance': [],
-        'power': [],
-        'regression': []
-        }
-    fix_bugs = {}
+def get_bugbug_regressors_and_fixes():
+    regressor_bug_ids_by_kind = defaultdict(lambda: [])
+    fix_bug_ids_by_kind = defaultdict(lambda: [])
+    fixes = {}
 
     with open('data/bugbug/bugs.json', encoding="utf-8") as f:
-        for line in tqdm(f, desc='Get regressor and fix bug ids'):
+        for line in tqdm(f, desc='Get regressors and fixes'):
             bug = json.loads(line)
             if bug['regressed_by'] and bug["product"] != "Invalid Bugs":
                 regressor_bug_ids_by_kind['regression'] = regressor_bug_ids_by_kind['regression'] + bug['regressed_by']
                 fix_bug_ids_by_kind['regression'].append(bug['id'])
-                fix_bugs[bug['id']] = bug
+                fixes[bug['id']] = bug
                 
                 for t in bug_to_types(bug):
                     regressor_bug_ids_by_kind[t] = regressor_bug_ids_by_kind[t] + bug['regressed_by']
@@ -181,12 +171,12 @@ def get_regressor_and_fix_bug_ids_by_kind():
         print(len(v), k)
     print('fix bug ids.')
 
-    return regressor_bug_ids_by_kind, fix_bug_ids_by_kind, fix_bugs
+    return regressor_bug_ids_by_kind, fix_bug_ids_by_kind, fixes
 
-def get_bugbug_labeling(regressor_bug_ids_by_kind, fix_bugs, selected_commits):
+def get_bugbug_labeling(regressor_bug_ids_by_kind, selected_commits):
 
     labeled_commits = []
-    for i, commit in selected_commits.iterrows():
+    for _, commit in selected_commits.iterrows():
         row = {
             'revision': commit['revision'],
             'bug_id': commit['bug_id'],
@@ -205,13 +195,59 @@ def get_bugbug_labeling(regressor_bug_ids_by_kind, fix_bugs, selected_commits):
     labeling.set_index('revision', inplace=True)
     return labeling
 
-def get_bugbug_issuelist(fix_bug_ids_by_kind, fix_bugs, selected_commits, hg_to_git):
+def get_defects_and_fixes():
+    fix_bug_ids_by_kind = defaultdict(lambda: [])
+    fixes = {}
+    with open('data/bugbug/bugs.json', encoding="utf-8") as f:
+        for line in tqdm(f, desc='Get defects and fixes'):
+            bug = json.loads(line)
+            if (bug['product'] !='"Invalid Bugs' and
+                bug['resolution'] == 'FIXED' and
+                bug['type'] == 'defect'):
+
+                fix_bug_ids_by_kind['regression'].append(bug['id'])
+                fixes[bug['id']] = bug
+    
+                for t in bug_to_types(bug):
+                    fix_bug_ids_by_kind[t].append(bug['id'])
+
+    print('Found')
+    for k,v in fix_bug_ids_by_kind.items():
+        print(len(v), k)
+    print('fix bug ids.')
+
+    return fix_bug_ids_by_kind, fixes
+
+
+def get_hg_git_mapping():
+    print('Get hg to git mapping ...', end='\r')
+    git_repo = 'data/mozilla-central-git'
+
+    # we stored the hg_hash in the commit message
+    template = '%H %s'
+    git_out_cmd = subprocess.run(f'git log --pretty="{template}"',
+                        capture_output=True,
+                        shell=True,
+                        cwd=git_repo)
+    git_log_str = git_out_cmd.stdout.decode('utf-8', 'ignore')
+
+    hg_to_git = {}
+    git_to_hg = {}
+    for line in git_log_str.splitlines():
+        git_hash, _, hg_hash = line.partition(' ')
+        hg_to_git[hg_hash] = git_hash
+        git_to_hg[git_hash] = hg_hash
+    print('Get hg to git mapping ... Done.')
+
+    return hg_to_git, git_to_hg
+
+def get_issuelist(fix_bug_ids_by_kind, fixes, selected_commits, hg_to_git, target='performance'):
 
     issue_list = {}
     date_format = '%Y-%m-%d %X %z'
     for i, commit in selected_commits.iterrows():
-        if commit['bug_id'] in fix_bug_ids_by_kind['performance']:
-            bug = fix_bugs[commit['bug_id']]
+        if commit['bug_id'] in fix_bug_ids_by_kind[target]:
+            bug = fixes[commit['bug_id']]
             issue_list[f'issue_{i}'] = {
                 'creationdate': pd.to_datetime(bug['creation_time']).strftime(date_format),
                 'resolutiondate': pd.to_datetime(bug['last_change_time']).strftime(date_format),
@@ -221,13 +257,115 @@ def get_bugbug_issuelist(fix_bug_ids_by_kind, fix_bugs, selected_commits, hg_to_
 
     return issue_list
 
-if __name__ == '__main__':
-    from src.utils import make_directory
-    make_directory('data/labeling')
+def get_labeling_from_szz_results(path, selected_commits, git_to_hg, target):
+    git_szz_results = read_data_from_json(os.path.join(path, 'results/fix_and_introducers_pairs.json'))
 
-    regressor_bug_ids_by_kind, fix_bug_ids_by_kind = get_regressor_and_fix_bug_ids_by_kind()
+    # convert back to hg hashes
+    szz_results = copy.deepcopy(git_szz_results)
+    for pair in szz_results:
+        pair[0] = git_to_hg[pair[0]]
+        pair[1] = git_to_hg[pair[1]]
+
+    fix_introducer_pairs = pd.DataFrame(szz_results, columns=['fix', 'introducer'])
+
+    introducers = set(fix_introducer_pairs['introducer'])
+
+    labeled_commits = []
+    for _, commit in selected_commits.iterrows():
+        row = {
+            'revision': commit['revision'],
+            'bug_id': commit['bug_id'],
+        }
+        
+        if commit['revision'] in introducers:
+            row[target] = 1
+        else:
+            row[target] = 0 
+
+        labeled_commits.append(row)
+
+    labeling = pd.DataFrame(labeled_commits)
+    labeling = labeling.convert_dtypes()
+    labeling.set_index('revision', inplace=True)
+    return labeling
+
+def print_labeling_stats(labeling, target):
+    p = labeling[target].sum()
+    n = (1-labeling[target]).sum()
+    print(f'positive labels: {p} {p/(p+n)*100:.2f}%, negative labels: {n} {n/(p+n)*100:.2f}%')
+
+if __name__ == '__main__':
+    from src.utils import *
+    make_directory('data/labeling')
+    
+    parser = argparse.ArgumentParser()
+    bugbug_description = 'Export labeling based on bugzilla regressed by label.'
+    parser.add_argument('--bugbug', action="store_true", dest='bugbug', help=bugbug_description)
+    
+    bugbug_szz_issuelist_description = 'Export issuelist for SZZUnleashed based on bugzilla regressed by label.'
+    parser.add_argument('--bugbug_szz_issuelist', action="store_true", dest='bugbug_szz_issuelist',
+        help=bugbug_szz_issuelist_description)
+
+    fixed_defect_szz_issuelist_description = 'Export issuelist for SZZUnleashed based on fixed defects.'
+    parser.add_argument('--fixed_defect_szz_issuelist', action="store_true", dest='fixed_defect_szz_issuelist',
+        help=fixed_defect_szz_issuelist_description)
+
+    bugbug_szz_export_description = 'Export results of SZZUnleashed based on bugzilla regressed by label.'
+    parser.add_argument('--bugbug_szz_export', action="store_true", dest='bugbug_szz_export',
+        help=bugbug_szz_export_description)
+
+    fixed_defect_szz_export_description = 'Export results of SZZUnleashed based on fixed defects.'
+    parser.add_argument('--fixed_defect_szz_export', action="store_true", dest='fixed_defect_szz_export',
+        help=fixed_defect_szz_export_description)
+
+    parser.add_argument('--target', type=str, default='performance', dest='target')
+
+    args = parser.parse_args(sys.argv[1:])
+    print(f'\n{args=}\n')
+    
     selected_commits = get_selected_commits()
 
-    bugbug_labeling = get_bugbug_labeling(regressor_bug_ids_by_kind, selected_commits)
+    hg_to_git, git_to_hg = {}, {}
+    if any([
+        args.bugbug_szz_issuelist,
+        args.fixed_defect_szz_issuelist,
+        args.bugbug_szz_export,
+        args.fixed_defect_szz_export
+    ]):
+        hg_to_git, git_to_hg = get_hg_git_mapping()
 
-    bugbug_labeling.to_csv('data/labeling/bugbug.csv')
+    if args.bugbug or args.bugbug_szz_issuelist:
+        regressor_bug_ids_by_kind, fix_bug_ids_by_kind, fixes = get_bugbug_regressors_and_fixes()
+
+        if args.bugbug:
+            print(bugbug_description)
+            labeling = get_bugbug_labeling(regressor_bug_ids_by_kind, selected_commits)
+            print_labeling_stats(labeling, args.target)
+            labeling.to_csv('data/labeling/bugbug.csv')
+
+        if args.bugbug_szz_issuelist:
+            print(bugbug_szz_issuelist_description)
+            issuelist = get_issuelist(fix_bug_ids_by_kind, fixes, selected_commits, hg_to_git, target=args.target)
+            print(f'{len(issuelist)=}')
+            make_directory('data/labeling/bugbug_szz')
+            write_json_to_file(issuelist, 'data/labeling/bugbug_szz/issuelist.json')
+
+    if args.fixed_defect_szz_issuelist:
+        print(fixed_defect_szz_issuelist_description)
+        fix_bug_ids_by_kind, fixes = get_defects_and_fixes()
+        issuelist = get_issuelist(fix_bug_ids_by_kind, fixes, selected_commits, hg_to_git, target=args.target)
+        print(f'{len(issuelist)=}')
+        make_directory('data/labeling/fixed_defect_szz')
+        write_json_to_file(issuelist, 'data/labeling/fixed_defect_szz/issuelist.json')
+
+    if args.bugbug_szz_export:
+        print(bugbug_szz_export_description)
+        labeling = get_labeling_from_szz_results('data/labeling/bugbug_szz', selected_commits, git_to_hg, args.target)
+        print_labeling_stats(labeling, args.target)
+        labeling.to_csv('data/labeling/bugbug_szz.csv')
+    
+    if args.fixed_defect_szz_export:
+        print(fixed_defect_szz_export_description)
+        labeling = get_labeling_from_szz_results('data/labeling/fixed_defect_szz', selected_commits, git_to_hg, args.target)
+        print_labeling_stats(labeling, args.target)
+        labeling.to_csv('data/labeling/fixed_defect_szz.csv')
