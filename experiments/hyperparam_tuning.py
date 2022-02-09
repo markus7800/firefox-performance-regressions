@@ -40,7 +40,7 @@ def print_classification_report(opt, X_train, X_test, y_train, y_test):
     print('Score:', opt.score(X_test, y_test))
 
 def bayes_opt(X_train, X_test, y_train, y_test,
-              pipeline, model_search_space, imbalanced_search_space, n_iter, scoring='f1', n_jobs=-1):
+              pipeline, model_search_space, imbalanced_search_space, n_iter, scoring='f1', n_jobs=-1, n_points=1):
     search_spaces = {
         **imbalanced_search_space,
         **model_search_space
@@ -54,6 +54,7 @@ def bayes_opt(X_train, X_test, y_train, y_test,
     y_test_proportion = len(y_test) / (len(y_train) + len(y_test))
     tscv = TimeSeriesSplit(n_splits=5, test_size=round(len(y_train) * y_test_proportion))
 
+    print(f'Sample {n_points=} with {n_jobs=}.')
     with tqdm(total=n_iter) as pbar:
         opt = BayesSearchCV(
             pipeline,
@@ -62,6 +63,7 @@ def bayes_opt(X_train, X_test, y_train, y_test,
             cv=tscv,
             scoring=scoring,
             n_jobs=n_jobs,
+            n_points=n_points, # number of models evaluated simultaneously
             random_state=0,
             verbose=0
         )
@@ -201,14 +203,10 @@ def get_bugbug_buglevel(target):
     features = pd.read_csv('data/feature_extractor/features_buglevel.csv')
     features['revision'] = features['first_revision']
     features.set_index('revision', inplace=True)
-    features
 
-    # %%
     labeling = pd.read_csv('data/labeling/bugbug.csv')
     labeling.set_index('revision', inplace=True)
-    labeling
 
-    # %%
     features['target'] = labeling[target] # works because index is revision hash
     assert features['first_id'].is_monotonic_increasing
     features = features.drop(['first_revision', 'first_id', 'revisions', 'ids'], axis=1)
@@ -216,7 +214,7 @@ def get_bugbug_buglevel(target):
     pos = features['target'].sum()
     neg = (1-features['target']).sum()
     print(f'{target}: {pos} positive {pos/(pos+neg)*100:.2f}% - negative {neg} {neg/(pos+neg)*100:.2f}% ')
-    # %%
+
     y = np.array(features['target'])
     X = features.fillna(0).drop('target', axis=1)
     # X = X.drop([c for c in X.columns if 'delta' in c], axis=1, errors='ignore')
@@ -225,6 +223,28 @@ def get_bugbug_buglevel(target):
 
     return X, y
 
+def get_szz_commitlevel(name, target):
+    features = pd.read_csv('data/feature_extractor/features_commitlevel.csv')
+    features.set_index('revision', inplace=True)
+
+    labeling = pd.read_csv(f'data/labeling/{name}.csv')
+    labeling.set_index('revision', inplace=True)
+
+    features['target'] = labeling[target] # works because index is revision hash
+    assert features['id'].is_monotonic_increasing
+    features = features.drop(['id'], axis=1)
+
+    pos = features['target'].sum()
+    neg = (1-features['target']).sum()
+    print(f'{target}: {pos} positive {pos/(pos+neg)*100:.2f}% - negative {neg} {neg/(pos+neg)*100:.2f}% ')
+
+    y = np.array(features['target'])
+    X = features.fillna(0).drop('target', axis=1)
+    # X = X.drop([c for c in X.columns if 'delta' in c], axis=1, errors='ignore')
+    X = np.array(X)
+    print(f'{X.shape=}\n')
+
+    return X, y
 
 import argparse
 import sys
@@ -240,7 +260,7 @@ if __name__ == '__main__':
         help='Number of samples per model.')
 
     parser.add_argument('--n_jobs', type=int, dest='n_jobs', default=5,
-        help='Number of parallel jobs.')
+        help='Number of parallel jobs. Should be a multiple of 5 (# of CV splits) for BayesOpt.')
 
     parser.add_argument('--target', type=str, dest='target', default='performance',
         help='Classification target.')
@@ -253,10 +273,12 @@ if __name__ == '__main__':
 
 
     args = parser.parse_args(sys.argv[1:])
-    print(f'\n{args.n_iter=}, {args.n_jobs=}, {args.target=}, {args.model=}, {args.data=}\n')
+    print(f'\n{args=}\n')
 
     data_map = {
-        'bugbug_buglevel': get_bugbug_buglevel
+        'bugbug_buglevel': get_bugbug_buglevel,
+        'bugbug_szz': lambda target: get_szz_commitlevel('bugbug_szz', target),
+        'fixed_defect_szz': lambda target: get_szz_commitlevel('fixed_defect_szz', target)
     }
     assert args.data in data_map.keys(), f'Unknown data and labeling {args.data=}.'
 
@@ -292,6 +314,7 @@ if __name__ == '__main__':
                         imbalanced_search_space=imbalanced_search_space(),
                         n_iter=args.n_iter,
                         scoring='roc_auc',
-                        n_jobs=args.n_jobs)
+                        n_jobs=args.n_jobs,
+                        n_points=max(args.n_jobs // 5, 1))
 
         save_cv_results(opt, os.path.join(output_dir, f'{args.data}_{args.target}_{args.model}.csv'))
