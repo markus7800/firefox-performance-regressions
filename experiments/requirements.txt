@@ -1,4 +1,4 @@
-numpy>=1.22.1
+numpy==1.21 # for numba not >=1.22
 scikit-learn>=1.0.2
 pandas>= 1.4.0
 tqdm>=4.62.3
@@ -7,3 +7,4 @@ imbalanced-learn>=0.9.0
 scikit-optimize>=0.9.0
 xgboost>=1.5.2
 tpot>=0.11.7
+shap>=0.40.0

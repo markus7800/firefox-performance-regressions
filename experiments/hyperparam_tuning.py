@@ -1,3 +1,4 @@
+from audioop import mul
 import numpy as np
 import pandas as pd
 import json
@@ -95,6 +96,8 @@ def save_cv_results(opt, path):
     res.to_csv(path)
 
 def tpot_opt(X_train, X_test, y_train, y_test, n_iter, scoring='f1', n_jobs=-1):
+    import multiprocessing
+    multiprocessing.set_start_method('forkserver')
     from tpot import TPOTClassifier
 
     y_test_proportion = len(y_test) / (len(y_train) + len(y_test))
@@ -199,56 +202,10 @@ def xgboost_search_space():
     }
 
 
-def get_bugbug_buglevel(target):
-    features = pd.read_csv('data/feature_extractor/features_buglevel.csv')
-    features['revision'] = features['first_revision']
-    features.set_index('revision', inplace=True)
-
-    labeling = pd.read_csv('data/labeling/bugbug.csv')
-    labeling.set_index('revision', inplace=True)
-
-    features['target'] = labeling[target] # works because index is revision hash
-    assert features['first_id'].is_monotonic_increasing
-    features = features.drop(['first_revision', 'first_id', 'revisions', 'ids'], axis=1)
-
-    pos = features['target'].sum()
-    neg = (1-features['target']).sum()
-    print(f'{target}: {pos} positive {pos/(pos+neg)*100:.2f}% - negative {neg} {neg/(pos+neg)*100:.2f}% ')
-
-    y = np.array(features['target'])
-    X = features.fillna(0).drop('target', axis=1)
-    # X = X.drop([c for c in X.columns if 'delta' in c], axis=1, errors='ignore')
-    X = np.array(X)
-    print(f'{X.shape=}\n')
-
-    return X, y
-
-def get_szz_commitlevel(name, target):
-    features = pd.read_csv('data/feature_extractor/features_commitlevel.csv')
-    features.set_index('revision', inplace=True)
-
-    labeling = pd.read_csv(f'data/labeling/{name}.csv')
-    labeling.set_index('revision', inplace=True)
-
-    features['target'] = labeling[target] # works because index is revision hash
-    assert features['id'].is_monotonic_increasing
-    features = features.drop(['id'], axis=1)
-
-    pos = features['target'].sum()
-    neg = (1-features['target']).sum()
-    print(f'{target}: {pos} positive {pos/(pos+neg)*100:.2f}% - negative {neg} {neg/(pos+neg)*100:.2f}% ')
-
-    y = np.array(features['target'])
-    X = features.fillna(0).drop('target', axis=1)
-    # X = X.drop([c for c in X.columns if 'delta' in c], axis=1, errors='ignore')
-    X = np.array(X)
-    print(f'{X.shape=}\n')
-
-    return X, y
-
 import argparse
 import sys
 import os
+from experiments.data_utils import *
 
 if __name__ == '__main__':
     output_dir = 'experiments/results'
@@ -276,13 +233,13 @@ if __name__ == '__main__':
     print(f'\n{args=}\n')
 
     data_map = {
-        'bugbug_buglevel': get_bugbug_buglevel,
+        'bugbug_buglevel': lambda target: get_bugbug_data(target, kind='buglevel'),
         'bugbug_szz': lambda target: get_szz_commitlevel('bugbug_szz', target),
         'fixed_defect_szz': lambda target: get_szz_commitlevel('fixed_defect_szz', target)
     }
     assert args.data in data_map.keys(), f'Unknown data and labeling {args.data=}.'
 
-    X, y = data_map[args.data](args.target)
+    X, y, features = data_map[args.data](args.target)
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, shuffle=False)
 
