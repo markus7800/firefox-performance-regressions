@@ -74,7 +74,7 @@ def bayes_opt(X_train, X_test, y_train, y_test,
 
         opt.fit(X_train, y_train, callback=on_step)
 
-        print(f'best val. score {opt.best_score_}')
+        print(f'best val. {scoring}: {opt.best_score_}')
 
         print_classification_report(opt, X_train, X_test, y_train, y_test)
         
@@ -111,7 +111,7 @@ def tpot_opt(X_train, X_test, y_train, y_test, n_iter, scoring='f1', n_jobs=-1):
     cv_scores = [(name, info['internal_cv_score']) for name, info in opt.evaluated_individuals_.items()]
     cv_scores = sorted(cv_scores, key=lambda p: -p[1])
 
-    print(f'best val. score {cv_scores[0][1]}')
+    print(f'best val. {scoring}: {cv_scores[0][1]}')
 
     print_classification_report(opt, X_train, X_test, y_train, y_test)
 
@@ -227,6 +227,9 @@ if __name__ == '__main__':
 
     parser.add_argument('--data', type=str, dest='data', default='bugbug_buglevel',
         help='Choice of labeling and data.')
+        
+    parser.add_argument('--scoring', type=str, dest='scoring', default='roc_auc',
+        help='Scoring function to be optimized.')
 
 
     args = parser.parse_args(sys.argv[1:])
@@ -254,7 +257,7 @@ if __name__ == '__main__':
     if args.model == 'tpot':
         opt = tpot_opt(X_train, X_test, y_train, y_test,
                 n_iter=args.n_iter,
-                scoring='roc_auc',
+                scoring=args.scoring,
                 n_jobs=args.n_jobs)
         
         save_tpot_resuls(opt, os.path.join(output_dir, f'{args.data}_{args.target}'))
@@ -270,8 +273,8 @@ if __name__ == '__main__':
                         model_search_space=search_space_map[args.model](),
                         imbalanced_search_space=imbalanced_search_space(),
                         n_iter=args.n_iter,
-                        scoring='roc_auc',
+                        scoring=args.scoring,
                         n_jobs=args.n_jobs,
                         n_points=max(args.n_jobs // 5, 1))
 
-        save_cv_results(opt, os.path.join(output_dir, f'{args.data}_{args.target}_{args.model}.csv'))
+        save_cv_results(opt, os.path.join(output_dir, f'{args.data}_{args.target}_{args.scoring}_{args.model}.csv'))
