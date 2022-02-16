@@ -166,7 +166,7 @@ def svm_search_space():
         'model': Categorical([LinearSVC(random_state=0)]),
         'model__C': Real(1e-4, 1e+3, 'log-uniform'),
         'kernel__kernel': Categorical(['linear', 'rbf', 'poly']),
-        'kernel__gamma': Categorical([None]),
+        #'kernel__gamma': Categorical([None]),
         'kernel__degree': Categorical([3, 5])
     }
 
