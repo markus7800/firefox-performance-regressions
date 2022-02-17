@@ -65,7 +65,35 @@ def get_selected_commits():
         ]
     
     return selected_commits
+    
+def group_commits_by_bugid_and_author(commits):
+    # get consecutive commits with same author and bug id
+    assert commits['id'].is_monotonic_increasing, 'Commits are not sorted.'
 
+    bug_id = 0
+    author = ''
+    cs = []
+    grouped_commits = []
+
+    def append_group(cs):
+        if len(cs) > 0:
+            # cs = pd.DataFrame(cs)
+            grouped_commits.append(cs)
+            
+    for (i, row) in commits.iterrows():
+        if bug_id != row['bug_id'] or author != row['author']:
+            append_group(cs)
+            cs = [dict(row)]
+            bug_id = row['bug_id']
+            author = row['author']
+        else:
+            cs.append(dict(row))
+
+    append_group(cs)
+
+    assert sum(len(group) for group in grouped_commits) == len(commits), 'Mismatching number of commits.'
+    
+    return grouped_commits
 
 #https://wiki.mozilla.org/BMO/UserGuide/BugFields
 # adapted from https://github.com/mozilla/bugbug/blob/master/bugbug/models/bugtype.py

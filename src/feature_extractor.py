@@ -150,8 +150,8 @@ class FeatureExtractor:
 
         comment_lengths = []
 
-        for (i, commit) in commits.iterrows():
-            rev_index = commit.id
+        for commit in commits:
+            rev_index = commit['id']
 
             with open(os.path.join(self.diff_dir, f'{rev_index}.txt'), encoding='utf-8') as f: # read diff
                 export_diff = f.read()
@@ -232,12 +232,12 @@ class FeatureExtractor:
 
         # developer, subsystem and directory metrics based on first commit
         # e.g. experience calculated from history made before commits
-        first_commit = commits.iloc[0]
+        first_commit = commits[0]
         author = first_commit['author'] # all commits by same author
         revision = first_commit['revision']
         rev_index = first_commit['id']
-        revisions = ','.join(commits['revision'])
-        rev_indices = ','.join(commits['id'].astype('str'))
+        revisions = ''.join(map(lambda commit: commit['revision'], commits))
+        rev_indices = ''.join(map(lambda commit: str(commit['id']), commits))
 
         recent_date = first_commit['date']- relativedelta(months=3)
         recent_revs = (self.commit_log['date'] > recent_date)
@@ -350,7 +350,8 @@ class FeatureExtractor:
             
             
 
-        ixs = [rev_index for rev_index in commits['id'] if rev_index in self.complexity_metrics.index]
+        rev_indexes = list(map(lambda commit: commit['id'], commits))
+        ixs = [rev_index for rev_index in rev_indexes if rev_index in self.complexity_metrics.index]
         if len(ixs) > 0:
             # compute aggregate complexity of files touched in commits
             commit_complexity_metrics = self.complexity_metrics.loc[ixs,:] # aggregate over all commits
@@ -362,8 +363,8 @@ class FeatureExtractor:
         
             # compute complexity delta caused by commits
 
-            first_rev_id = commits.iloc[0]['id']
-            last_rev_id = commits.iloc[-1]['id']
+            first_rev_id = commits[0]['id']
+            last_rev_id = commits[-1]['id']
             file_indices = list({file_index for _, file_index in self.complexity_metrics.loc[ixs].index}) # unique
 
             # guaranteed to have all files
@@ -395,35 +396,6 @@ class FeatureExtractor:
                 
         features_df = pd.DataFrame(features)
         return features_df
-    
-def group_commits_by_bugid_and_author(commits):
-    # get consecutive commits with same author and bug id
-    assert commits['id'].is_monotonic_increasing, 'Commits are not sorted.'
-
-    bug_id = 0
-    author = ''
-    cs = []
-    grouped_commits = []
-
-    def append_group(cs):
-        if len(cs) > 0:
-            cs = pd.DataFrame(cs)
-            grouped_commits.append(cs)
-            
-    for (i, row) in commits.iterrows():
-        if bug_id != row['bug_id'] or author != row['author']:
-            append_group(cs)
-            cs = [row]
-            bug_id = row['bug_id']
-            author = row['author']
-        else:
-            cs.append(row)
-
-    append_group(cs)
-
-    assert sum(len(group) for group in grouped_commits) == len(commits), 'Mismatching number of commits.'
-    
-    return grouped_commits
 
 if __name__ == '__main__':
     make_directory('data/feature_extractor')
@@ -446,7 +418,7 @@ if __name__ == '__main__':
     # Commit level:
 
     # create groups of single commits since FeatureExtractor handles only group of commits in form of DataFrame
-    grouped_commits = [pd.DataFrame([row]) for i, row in commits.iterrows()]
+    grouped_commits = [[dict(row)] for i, row in commits.iterrows()]
     features = feature_extractor.extract_features_for_commits(grouped_commits)
 
     features = features.rename({'first_revision': 'revision', 'first_id': 'id'}, axis=1)
@@ -458,7 +430,6 @@ if __name__ == '__main__':
     
     
     features.to_csv('data/feature_extractor/features_commitlevel.csv', index=False)
-
 
     # Bug level:
 

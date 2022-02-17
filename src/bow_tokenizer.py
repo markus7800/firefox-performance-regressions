@@ -1,73 +1,3 @@
-#%%
-from tqdm import tqdm
-import os
-import re
-#%%
-
-folder = '../data/repo_miner/commit_diffs'
-
-word_pattern = r'[\w]+|[^\w\s]'
-camelcase_pattern = r'(?<=[a-z])(?=[A-Z])'
-
-
-symbols = '+-*/%=!<>&|^~.,:"\';{}()[]\\#´`?$'
-
-# %%
-tokens = {}
-
-file_type_whitelist = set(['.rs', '.js', '.cxx', '.cpp', '.py', '.c', '.cc', '.ts'])
-for file in tqdm(os.listdir(folder)):
-    # print(file)
-    with open(os.path.join(folder, file), 'r', encoding='utf-8') as f:
-        export_diff = f.read()
-        header, sep, diff = export_diff.partition('diff --git ')
-        
-        diff = sep + diff
-
-        for file_export in diff.split('diff --git ')[1:]:
-            file_header, sep, file_diff = file_export.partition('\n@@') # everything before first listed source code changes
-            file_diff = sep + file_diff
-            file_name = file_header.partition('\n')[0].partition(' b/')[2]
-
-            if os.path.splitext(file_name)[1] not in file_type_whitelist:
-                continue
-
-            for line in file_diff.splitlines():
-                if len(line) == 0:
-                    continue
-                if line[:10] == 'diff --git' or line[:3] == '+++' or line[:3] == '---' or line[:2] == '@@':
-                    continue
-
-                prefix = ''
-                if line[0] == '+':
-                    prefix = 'added_'
-                elif line[0] == '-':
-                    prefix = 'deleted_'
-                else:
-                    prefix = 'context_'
-
-                for wtoken in re.findall(word_pattern, line[1:]):
-                    if wtoken in symbols:
-                        continue
-                    if wtoken.isnumeric():
-                        continue
-                    for stoken in wtoken.split('_'): # snake case
-                        for ctoken in re.split(camelcase_pattern, stoken): # camel case
-                            if len(ctoken) > 2:
-                                token = prefix + ctoken.lower() # make lower case
-                                tokens[token] = tokens.get(token, 0) + 1
-# %%
-tokens = [(k, v) for k,v in sorted(tokens.items(), key=lambda item: -item[1])]
-
-# %%
-for k,v in tokens[:100]:
-    print(k ,v)
-# %%
-re.split(camelcase_pattern, 'camelCaseCase')
-# %%
-
-# %%
-
 from tqdm import tqdm
 import os
 import re
@@ -81,56 +11,58 @@ class DiffTokenizer:
         self.file_type_whitelist = set(['.rs', '.js', '.cxx', '.cpp', '.py', '.c', '.cc', '.ts'])
         self.pbar = pbar
 
-    def __call__(self, file):
+    def __call__(self, commits):
         tokens = []
-        with open(os.path.join(self.folder, file), 'r', encoding='utf-8') as f:
-            export_diff = f.read()
-            header, sep, diff = export_diff.partition('diff --git ')
-            
-            diff = sep + diff
-
-            for file_export in diff.split('diff --git ')[1:]:
-                file_header, sep, file_diff = file_export.partition('\n@@') # everything before first listed source code changes
-                file_diff = sep + file_diff
-                file_name = file_header.partition('\n')[0].partition(' b/')[2]
+        for commit in commits:
+            rev_index = commit['id']
+            file = f'{rev_index}.txt'
+            with open(os.path.join(self.folder, file), 'r', encoding='utf-8') as f:
+                export_diff = f.read()
+                header, sep, diff = export_diff.partition('diff --git ')
                 
-                # exclude generated web assembly files
-                # if ('tests' in file_name and 'wasm' in file_name) or '.wast.js' in file_name:
-                #     continue
-                
-                # # exclude js test files
-                # if 'js/src/tests/' in file_name:
-                #     continue
+                diff = sep + diff
 
-                if os.path.splitext(file_name)[1] not in self.file_type_whitelist:
-                    continue
-
-                for line in file_diff.splitlines():
-                    if len(line) == 0:
+                for file_export in diff.split('diff --git ')[1:]:
+                    file_header, sep, file_diff = file_export.partition('\n@@') # everything before first listed source code changes
+                    file_diff = sep + file_diff
+                    file_name = file_header.partition('\n')[0].partition(' b/')[2]
+                    
+                    # exclude generated web assembly files
+                    if ('tests' in file_name and 'wasm' in file_name) or '.wast.js' in file_name:
                         continue
-                    if line[:10] == 'diff --git' or line[:3] == '+++' or line[:3] == '---' or line[:2] == '@@':
+                    
+                    # exclude js test files
+                    if 'js/src/tests/' in file_name:
                         continue
 
-                    prefix = ''
-                    if line[0] == '+':
-                        prefix = 'added_'
-                    elif line[0] == '-':
-                        prefix = 'deleted_'
-                    else:
-                        prefix = 'context_'
+                    if os.path.splitext(file_name)[1] not in self.file_type_whitelist:
+                        continue
 
-                    for wtoken in re.findall(self.word_pattern, line[1:]):
-                        if wtoken in self.symbols:
+                    for line in file_diff.splitlines():
+                        if len(line) == 0:
                             continue
-                        if wtoken.isnumeric():
+                        if line[:10] == 'diff --git' or line[:3] == '+++' or line[:3] == '---' or line[:2] == '@@':
                             continue
-                        for stoken in wtoken.split('_'): # snake case
-                            for ctoken in re.split(self.camelcase_pattern, stoken): # camel case
-                                if len(ctoken) > 2:
-                                    # token = prefix + ctoken.lower() # make lower case
-                                    token = ctoken.lower() # make lower case
 
-                                    tokens.append(token)
+                        prefix = ''
+                        if line[0] == '+':
+                            prefix = 'added_'
+                        elif line[0] == '-':
+                            prefix = 'deleted_'
+                        else:
+                            prefix = 'context_'
+
+                        for wtoken in re.findall(self.word_pattern, line[1:]):
+                            if wtoken in self.symbols:
+                                continue
+                            if wtoken.isnumeric():
+                                continue
+                            for stoken in wtoken.split('_'): # snake case
+                                for ctoken in re.split(self.camelcase_pattern, stoken): # camel case
+                                    if len(ctoken) > 2:
+                                        token = prefix + ctoken.lower() # make lower case
+                                        
+                                        tokens.append(token)
         if self.pbar:
             self.pbar.update(1)
 
@@ -145,6 +77,8 @@ class DiffTokenizer:
         with open(os.path.join(self.folder, file), 'r', encoding='utf-8') as f:
             export_diff = f.read()
             header, sep, diff = export_diff.partition('diff --git ')
+            print(header)
+            print('\n\n')
 
             for file_export in diff.split('diff --git ')[1:]:
                 file_header, sep, file_diff = file_export.partition('\n@@') # everything before first listed source code changes
@@ -155,43 +89,56 @@ class DiffTokenizer:
                     continue
 
                 print(file_export)
-# %%
-from sklearn.feature_extraction.text import TfidfVectorizer
-folder='../data/repo_miner/commit_diffs'
-corpus = os.listdir(folder)
-with tqdm(total=len(corpus), desc='Tokenize diffs') as pbar:
-    tk = DiffTokenizer(folder=folder, pbar=pbar)
-    vt = TfidfVectorizer(tokenizer=tk, norm=None)
-    X = vt.fit_transform(corpus)
-# %%
 
-# %%
-X.shape
-# %%
-vt.get_feature_names_out()
-# %%
+
 import numpy as np
-import matplotlib.pyplot as plt
-m = np.array(X.max(axis=0).todense()).reshape(-1)
-plt.boxplot(m)
-# %%
-# %%# %%
-m.reshape(-1)
-# %%
-m = np.array(X.max(axis=0).todense()).reshape(-1)
-f = sorted(zip(vt.get_feature_names_out(), list(m)), key=lambda x: x[1])
-# %%
-f[:25]
-# %%
-f[-25:]
-# %%
-i = vt.vocabulary_['test262error']
-# %%
-a = X[:,i].argmax()
-a
-# %%
-X[a,i]
+from src.utils import make_directory
+from src.labeling import *
+from src.repo_miner import get_commit_log
+import pickle
+from sklearn.feature_extraction.text import TfidfVectorizer
 
-# %%
-print(tk.get_source_diff(corpus[a]))
-# %%
+if __name__ == '__main__':
+    selected_commits = get_selected_commits()
+
+    commit_log = get_commit_log('data/repo_miner/commit_log.csv')
+
+    commits = commit_log.join(selected_commits[['bug_id']], how='inner')
+
+    if len(commits) == len(selected_commits):
+        print('Found all selected_commits in commit_log.')
+    else:
+        print('Did not find all selected_commits in commit_log. data/bugbug/commits.json and the local repository are not synchronised.')
+
+    assert commits['id'].is_monotonic_increasing, 'Commits are not sorted.'
+
+
+    max_features = 50000
+    
+
+    # Commit level:
+    grouped_commits = [[dict(row)] for i, row in commits.iterrows()]
+
+    folder='data/repo_miner/commit_diffs'
+    with tqdm(total=len(grouped_commits), desc='Tokenize diffs - Commit level') as pbar:
+        tk = DiffTokenizer(folder=folder, pbar=pbar)
+        # lowercase=False because input are not real docs but commits, disables any preprocessing
+        vt = TfidfVectorizer(tokenizer=tk, max_features=max_features, lowercase=False) 
+        X = vt.fit_transform(grouped_commits)
+        pickle.dump(X, open('data/bow/bow_commitlevel.pickle', 'wb'))
+        
+        revisions = pd.DataFrame([commits[0]['revision'] for commits in grouped_commits], columns=['revision'])
+        revisions.to_csv('data/bow/revisions_commitlevel.csv', index=False)
+
+    
+    # Bug level:
+    grouped_commits = group_commits_by_bugid_and_author(commits)
+    with tqdm(total=len(grouped_commits), desc='Tokenize diffs - Bug level') as pbar:
+        tk = DiffTokenizer(folder=folder, pbar=pbar)
+        # lowercase=False because input are not real docs but commits, disables any preprocessing
+        vt = TfidfVectorizer(tokenizer=tk, max_features=max_features, lowercase=False) 
+        X = vt.fit_transform(grouped_commits)
+        pickle.dump(X, open('data/bow/bow_buglevel.pickle', 'wb'))
+        
+        revisions = pd.DataFrame([commits[0]['revision'] for commits in grouped_commits], columns=['first_revision'])
+        revisions.to_csv('data/bow/revisions_buglevel.csv', index=False)
