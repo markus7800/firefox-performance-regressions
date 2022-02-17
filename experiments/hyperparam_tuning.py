@@ -1,4 +1,3 @@
-from audioop import mul
 import numpy as np
 import pandas as pd
 import json
@@ -40,7 +39,7 @@ def print_classification_report(opt, X_train, X_test, y_train, y_test):
     print(metrics.classification_report(y_test, y_hat))
     print('Score:', opt.score(X_test, y_test))
 
-def bayes_opt(X_train, X_test, y_train, y_test,
+def bayes_opt(model_name, X_train, X_test, y_train, y_test,
               pipeline, model_search_space, imbalanced_search_space, n_iter, scoring='f1', n_jobs=-1, n_points=1):
     search_spaces = {
         **imbalanced_search_space,
@@ -56,7 +55,7 @@ def bayes_opt(X_train, X_test, y_train, y_test,
     tscv = TimeSeriesSplit(n_splits=5, test_size=round(len(y_train) * y_test_proportion))
 
     print(f'Sample {n_points=} with {n_jobs=}.')
-    with tqdm(total=n_iter) as pbar:
+    with tqdm(total=n_iter, desc=model_name) as pbar:
         opt = BayesSearchCV(
             pipeline,
             search_spaces,
@@ -231,18 +230,22 @@ if __name__ == '__main__':
     parser.add_argument('--scoring', type=str, dest='scoring', default='roc_auc',
         help='Scoring function to be optimized.')
 
+    parser.add_argument('--features', type=str, dest='features', default='traditional',
+        help='Features to be used - traditional or bow.')
 
     args = parser.parse_args(sys.argv[1:])
     print(f'\n{args=}\n')
 
+    get_ml_data = get_ml_data_traditional if args.features == 'traditional' else get_ml_data_bow
+
     data_map = {
-        'bugbug_buglevel': lambda target: get_bugbug_data(target, kind='buglevel'),
-        'bugbug_szz': lambda target: get_szz_commitlevel('bugbug_szz', target),
-        'fixed_defect_szz': lambda target: get_szz_commitlevel('fixed_defect_szz', target)
+        'bugbug_buglevel': lambda target: get_ml_data('bugbug', target, kind='buglevel'),
+        'bugbug_szz': lambda target: get_ml_data('bugbug_szz', target, kind='commitlevel'),
+        'fixed_defect_szz': lambda target: get_ml_data('fixed_defect_szz', target, kind='commitlevel')
     }
     assert args.data in data_map.keys(), f'Unknown data and labeling {args.data=}.'
 
-    X, y, features = data_map[args.data](args.target)
+    X, y, _ = data_map[args.data](args.target)
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, shuffle=False)
 
@@ -265,11 +268,15 @@ if __name__ == '__main__':
     else:
         args.model in search_space_map.keys(), f'Invalid model {args.model}.'
 
-        pipeline = default_pipeline if args.model != 'svm' else svm_pipeline
+        pipeline = default_pipeline() if args.model != 'svm' else svm_pipeline()
+
+        if args.features == 'bow':
+            pipeline.set_params(scaler=None)
 
         # %%
-        opt = bayes_opt(X_train, X_test, y_train, y_test,
-                        pipeline=pipeline(),
+        opt = bayes_opt(args.model,
+                        X_train, X_test, y_train, y_test,
+                        pipeline=pipeline,
                         model_search_space=search_space_map[args.model](),
                         imbalanced_search_space=imbalanced_search_space(),
                         n_iter=args.n_iter,
@@ -277,4 +284,4 @@ if __name__ == '__main__':
                         n_jobs=args.n_jobs,
                         n_points=max(args.n_jobs // 5, 1))
 
-        save_cv_results(opt, os.path.join(output_dir, f'{args.data}_{args.target}_{args.scoring}_{args.model}.csv'))
+        save_cv_results(opt, os.path.join(output_dir, f'{args.data}_{args.features}_{args.target}_{args.scoring}_{args.model}.csv'))

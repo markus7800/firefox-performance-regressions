@@ -2,10 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sklearn.metrics as metrics
 from sklearn.svm import LinearSVC
+from imblearn.pipeline import Pipeline
 
 
 def plot_precision_recall_curve_with_f1(clf, X, y, path=None):
-    if type(clf['model']) is LinearSVC:
+    if type(clf) is LinearSVC or (type(clf) is Pipeline and type(clf['model']) is LinearSVC):
         y_score = clf.decision_function(X)
     else:
         y_score = clf.predict_proba(X)[:,1]
@@ -33,7 +34,7 @@ def plot_precision_recall_curve_with_f1(clf, X, y, path=None):
     plt.show()
 
 def plot_roc_curve(clf, X, y, path=None):
-    if type(clf['model']) is LinearSVC:
+    if type(clf) is LinearSVC or (type(clf) is Pipeline and type(clf['model']) is LinearSVC):
         y_score = clf.decision_function(X)
     else:
         y_score = clf.predict_proba(X)[:,1]

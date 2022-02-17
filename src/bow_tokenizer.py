@@ -125,9 +125,10 @@ if __name__ == '__main__':
         # lowercase=False because input are not real docs but commits, disables any preprocessing
         vt = TfidfVectorizer(tokenizer=tk, max_features=max_features, lowercase=False) 
         X = vt.fit_transform(grouped_commits)
-        pickle.dump(X, open('data/bow/bow_commitlevel.pickle', 'wb'))
+        with open('data/bow/bow_commitlevel.pickle', 'wb') as f:
+            pickle.dump((X, vt.get_feature_names_out()), f)
         
-        revisions = pd.DataFrame([commits[0]['revision'] for commits in grouped_commits], columns=['revision'])
+        revisions = pd.DataFrame([(commits[0]['revision'], commits[0]['id']) for commits in grouped_commits], columns=['revision', 'id'])
         revisions.to_csv('data/bow/revisions_commitlevel.csv', index=False)
 
     
@@ -138,7 +139,8 @@ if __name__ == '__main__':
         # lowercase=False because input are not real docs but commits, disables any preprocessing
         vt = TfidfVectorizer(tokenizer=tk, max_features=max_features, lowercase=False) 
         X = vt.fit_transform(grouped_commits)
-        pickle.dump(X, open('data/bow/bow_buglevel.pickle', 'wb'))
+        with open('data/bow/bow_buglevel.pickle', 'wb') as f:
+            pickle.dump((X, vt.get_feature_names_out()), f)
         
-        revisions = pd.DataFrame([commits[0]['revision'] for commits in grouped_commits], columns=['first_revision'])
+        revisions = pd.DataFrame([(commits[0]['revision'], commits[0]['id'])  for commits in grouped_commits], columns=['first_revision', 'first_id'])
         revisions.to_csv('data/bow/revisions_buglevel.csv', index=False)
