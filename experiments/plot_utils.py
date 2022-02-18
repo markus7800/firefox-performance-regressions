@@ -4,12 +4,15 @@ import sklearn.metrics as metrics
 from sklearn.svm import LinearSVC
 from imblearn.pipeline import Pipeline
 
-
-def plot_precision_recall_curve_with_f1(clf, X, y, path=None):
+def get_y_score(clf, X):
     if type(clf) is LinearSVC or (type(clf) is Pipeline and type(clf['model']) is LinearSVC):
         y_score = clf.decision_function(X)
     else:
         y_score = clf.predict_proba(X)[:,1]
+    return y_score
+
+def plot_precision_recall_curve_with_f1(clf, X, y, path=None):
+    y_score = get_y_score(clf, X)
 
     precision, recall, thresholds = metrics.precision_recall_curve(y, y_score)
     display = metrics.PrecisionRecallDisplay(precision=precision, recall=recall)
@@ -34,10 +37,8 @@ def plot_precision_recall_curve_with_f1(clf, X, y, path=None):
     plt.show()
 
 def plot_roc_curve(clf, X, y, path=None):
-    if type(clf) is LinearSVC or (type(clf) is Pipeline and type(clf['model']) is LinearSVC):
-        y_score = clf.decision_function(X)
-    else:
-        y_score = clf.predict_proba(X)[:,1]
+    y_score = get_y_score(clf, X)
+
 
     fpr, tpr, thresholds = metrics.roc_curve(y, y_score) # specificity TN/N, recall (sensitivity) TP/P
     roc_auc = metrics.auc(fpr, tpr)
