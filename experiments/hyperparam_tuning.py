@@ -104,7 +104,8 @@ def tpot_opt(X_train, X_test, y_train, y_test, n_iter, scoring='f1', n_jobs=-1):
     opt = TPOTClassifier(generations=n_iter, population_size=100,
                             cv=tscv, scoring=scoring,
                             random_state=0, verbosity=3,
-                            n_jobs=n_jobs)
+                            n_jobs=n_jobs,
+                            log_file='tpot_log.txt')
     opt.fit(X_train, y_train)
 
     cv_scores = [(name, info['internal_cv_score']) for name, info in opt.evaluated_individuals_.items()]
@@ -227,7 +228,7 @@ if __name__ == '__main__':
     parser.add_argument('--data', type=str, dest='data', default='bugbug_buglevel',
         help='Choice of labeling and data.')
         
-    parser.add_argument('--scoring', type=str, dest='scoring', default='roc_auc',
+    parser.add_argument('--scoring', type=str, dest='scoring', default='average_precision',
         help='Scoring function to be optimized.')
 
     parser.add_argument('--features', type=str, dest='features', default='traditional',
@@ -263,7 +264,7 @@ if __name__ == '__main__':
                 scoring=args.scoring,
                 n_jobs=args.n_jobs)
         
-        save_tpot_resuls(opt, os.path.join(output_dir, f'{args.data}_{args.target}'))
+        save_tpot_resuls(opt, os.path.join(output_dir, f'{args.data}_{args.features}_{args.target}_{args.scoring}'))
 
     else:
         args.model in search_space_map.keys(), f'Invalid model {args.model}.'
