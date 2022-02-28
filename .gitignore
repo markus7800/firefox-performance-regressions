@@ -1,6 +1,6 @@
 data/
 
-experiments/results
+experiments/results*
 experiments/plots*
 
 utils/SZZUnleashed/
