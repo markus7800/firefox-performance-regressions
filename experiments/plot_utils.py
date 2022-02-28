@@ -5,10 +5,10 @@ from sklearn.svm import LinearSVC
 from imblearn.pipeline import Pipeline
 
 def get_y_score(clf, X):
-    if type(clf) is LinearSVC or (type(clf) is Pipeline and type(clf['model']) is LinearSVC):
-        y_score = clf.decision_function(X)
-    else:
+    if (type(clf) is Pipeline and hasattr(clf._final_estimator, 'predict_proba')) or hasattr(clf, 'predict_proba'):
         y_score = clf.predict_proba(X)[:,1]
+    else:
+        y_score = clf.decision_function(X)
     return y_score
 
 def plot_precision_recall_curve_with_f1(clf, X, y, path=None):
