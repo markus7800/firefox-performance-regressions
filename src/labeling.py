@@ -9,7 +9,7 @@ import argparse
 import sys
 import copy
 
-def get_selected_commits():
+def get_all_commits():
     def is_wptsync(commit):
         return "wptsync" in commit["author_email"] or any(
             s in commit["desc"] for s in ("wpt-pr:", "wpt-head:", "wpt-type:")
@@ -18,7 +18,7 @@ def get_selected_commits():
     all_commits = []
     # contains only default branch and no merges
     with open('data/bugbug/commits.json', encoding="utf-8") as f:
-        for line in tqdm(f, desc='Get selected commits'):
+        for line in tqdm(f, desc='Get commits'):
             commit_data = json.loads(line)
             all_commits.append([
                 commit_data['node'],
@@ -48,6 +48,12 @@ def get_selected_commits():
     all_commits.set_index('index', inplace=True)
     all_commits = all_commits.convert_dtypes()
     all_commits['date'] = pd.to_datetime(all_commits['date'])
+
+    return all_commits
+
+
+def get_selected_commits():
+    all_commits = get_all_commits()
 
 
     MIN_DATE = datetime(2019,7,1)
@@ -172,6 +178,7 @@ def get_bugbug_regressors_and_fixes():
     regressor_bug_ids_by_kind = defaultdict(lambda: [])
     fix_bug_ids_by_kind = defaultdict(lambda: [])
     fixes = {}
+    fix_to_regressor =  defaultdict(lambda: [])
 
     with open('data/bugbug/bugs.json', encoding="utf-8") as f:
         for line in tqdm(f, desc='Get regressors and fixes'):
@@ -180,6 +187,7 @@ def get_bugbug_regressors_and_fixes():
                 regressor_bug_ids_by_kind['regression'] = regressor_bug_ids_by_kind['regression'] + bug['regressed_by']
                 fix_bug_ids_by_kind['regression'].append(bug['id'])
                 fixes[bug['id']] = bug
+                fix_to_regressor[bug['id']] = fix_to_regressor[bug['id']] + bug['regressed_by']
                 
                 for t in bug_to_types(bug):
                     regressor_bug_ids_by_kind[t] = regressor_bug_ids_by_kind[t] + bug['regressed_by']
@@ -199,7 +207,7 @@ def get_bugbug_regressors_and_fixes():
         print(len(v), k)
     print('fix bug ids.')
 
-    return regressor_bug_ids_by_kind, fix_bug_ids_by_kind, fixes
+    return regressor_bug_ids_by_kind, fix_bug_ids_by_kind, fixes, fix_to_regressor
 
 def get_bugbug_labeling(regressor_bug_ids_by_kind, selected_commits):
 
@@ -363,7 +371,7 @@ if __name__ == '__main__':
         hg_to_git, git_to_hg = get_hg_git_mapping()
 
     if args.bugbug or args.bugbug_szz_issuelist:
-        regressor_bug_ids_by_kind, fix_bug_ids_by_kind, fixes = get_bugbug_regressors_and_fixes()
+        regressor_bug_ids_by_kind, fix_bug_ids_by_kind, fixes, fix_to_regressor = get_bugbug_regressors_and_fixes()
 
         if args.bugbug:
             print(bugbug_description)

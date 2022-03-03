@@ -2,6 +2,7 @@ data/
 
 experiments/results*
 experiments/plots*
+results*
 
 utils/SZZUnleashed/
 utils/fast-export/
