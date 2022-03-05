@@ -49,6 +49,9 @@ def get_all_commits():
     all_commits = all_commits.convert_dtypes()
     all_commits['date'] = pd.to_datetime(all_commits['date'])
 
+    all_commits = all_commits.drop_duplicates()
+    assert len(set(all_commits['revision'])) == len(all_commits), 'Duplicated revisions found,'
+    
     return all_commits
 
 
@@ -63,13 +66,12 @@ def get_selected_commits():
 
     selected_commits = all_commits[
         ~all_commits['bug_id'].isna() &
-        ~all_commits['backsout'] &
         ~all_commits['is_wptsync'] &
         ~all_commits['ignored'] &
         (MIN_DATE <= all_commits['date']) &
         (all_commits['date'] <= MAX_DATE - relativedelta(months=3))
         ]
-    
+
     return selected_commits
     
 def group_commits_by_bugid_and_author(commits):
@@ -285,10 +287,10 @@ def get_issuelist(fix_bug_ids_by_kind, fixes, selected_commits, hg_to_git, targe
         if commit['bug_id'] in fix_bug_ids_by_kind[target]:
             bug = fixes[commit['bug_id']]
             issue_list[f'issue_{i}'] = {
-                'creationdate': pd.to_datetime(bug['creation_time']).strftime(date_format),
-                'resolutiondate': pd.to_datetime(bug['last_change_time']).strftime(date_format),
+                'creationdate': pd.to_datetime(bug['creation_time']).strftime(date_format), # relevant for SZZ and not possible to be parsed from git entry
+                'resolutiondate': pd.to_datetime(bug['last_change_time']).strftime(date_format), # has to be resolved before last_change_time, not relevant for SZZ
                 'hash': hg_to_git[commit['revision']], # convert to git revision
-                'commitdate': commit['date'].strftime(date_format) 
+                'commitdate': commit['date'].strftime(date_format) # not relevant for SZZ (parsed from git entry anyways)
             }
 
     return issue_list

@@ -388,7 +388,7 @@ if __name__ == "__main__":
 
     commit_rev_ids_set = set(commit_log.join(selected_commits[['bug_id']], how='inner')['id'])
     if len(commit_rev_ids_set) == len(selected_commits):
-        print('Found all selected_commits in commit_log.')
+        print(f'Found all {len(selected_commits)} selected_commits in commit_log.')
     else:
         print('Did not find all selected_commits in commit_log. data/bugbug/commits.json and the local repository are not synchronised.')
 
