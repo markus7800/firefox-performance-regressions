@@ -94,7 +94,7 @@ def save_cv_results(opt, path):
 
     res.to_csv(path)
 
-def tpot_opt(X_train, X_test, y_train, y_test, n_iter, scoring='f1', n_jobs=-1):
+def tpot_opt(X_train, X_test, y_train, y_test, n_iter, scoring='f1', n_jobs=-1, logfilename='tpot_log.txt'):
     import multiprocessing
     multiprocessing.set_start_method('forkserver')
     from tpot import TPOTClassifier
@@ -105,7 +105,7 @@ def tpot_opt(X_train, X_test, y_train, y_test, n_iter, scoring='f1', n_jobs=-1):
                             cv=tscv, scoring=scoring,
                             random_state=0, verbosity=3,
                             n_jobs=n_jobs,
-                            log_file='tpot_log.txt')
+                            log_file=logfilename)
     opt.fit(X_train, y_train)
 
     cv_scores = [(name, info['internal_cv_score']) for name, info in opt.evaluated_individuals_.items()]
@@ -259,15 +259,26 @@ if __name__ == '__main__':
     }
     
     if args.model == 'tpot':
+        path = f'{args.data}_{args.features}_{args.target}_{args.scoring}'
         opt = tpot_opt(X_train, X_test, y_train, y_test,
                 n_iter=args.n_iter,
                 scoring=args.scoring,
-                n_jobs=args.n_jobs)
+                n_jobs=args.n_jobs,
+                logfilename='tpot_log_' + path + '.txt')
         
-        save_tpot_resuls(opt, os.path.join(output_dir, f'{args.data}_{args.features}_{args.target}_{args.scoring}'))
+        save_tpot_resuls(opt, os.path.join(output_dir, path))
 
     else:
         args.model in search_space_map.keys(), f'Invalid model {args.model}.'
+        
+        if args.model == 'mlp':
+            import os
+            n_threads = '4'
+            os.environ["OMP_NUM_THREADS"] = n_threads
+            os.environ['OPENBLAS_NUM_THREADS'] = n_threads
+            os.environ['MKL_NUM_THREADS'] = n_threads
+            os.environ['VECLIB_MAXIMUM_THREADS'] = n_threads
+            os.environ['NUMEXPR_NUM_THREADS'] = n_threads
 
         pipeline = default_pipeline() if args.model != 'svm' else svm_pipeline()
 
