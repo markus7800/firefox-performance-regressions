@@ -236,8 +236,8 @@ class FeatureExtractor:
         author = first_commit['author'] # all commits by same author
         revision = first_commit['revision']
         rev_index = first_commit['id']
-        revisions = ''.join(map(lambda commit: commit['revision'], commits))
-        rev_indices = ''.join(map(lambda commit: str(commit['id']), commits))
+        revisions = ','.join(map(lambda commit: commit['revision'], commits))
+        rev_indices = ','.join(map(lambda commit: str(commit['id']), commits))
 
         recent_date = first_commit['date']- relativedelta(months=3)
         recent_revs = (self.commit_log['date'] > recent_date)
