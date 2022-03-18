@@ -234,15 +234,18 @@ if __name__ == '__main__':
     parser.add_argument('--features', type=str, dest='features', default='traditional',
         help='Features to be used - traditional or bow.')
 
+    parser.add_argument('--drop_features', dest='drop_features', action="store_true",
+        help='Reduces feature space.')
+
     args = parser.parse_args(sys.argv[1:])
     print(f'\n{args=}\n')
 
     get_ml_data = get_ml_data_traditional if args.features == 'traditional' else get_ml_data_bow
+    drop_columns = lambda columns: [c for c in columns if 'delta_' in c or 'min_' in c or 'max_' in c or 'sum_' in c] if args.drop_features and args.features == 'traditional' else None
 
     data_map = {
-        'bugbug_buglevel': lambda target: get_ml_data('bugbug', target, kind='buglevel'),
-        'bugbug_szz': lambda target: get_ml_data('bugbug_szz', target, kind='commitlevel'),
-        'fixed_defect_szz': lambda target: get_ml_data('fixed_defect_szz', target, kind='commitlevel')
+        'bugbug_buglevel': lambda target: get_ml_data('bugbug', target, kind='buglevel', drop_columns=drop_columns),
+        'fixed_defect_szz': lambda target: get_ml_data('fixed_defect_szz', target, kind='commitlevel', drop_columns=drop_columns)
     }
     assert args.data in data_map.keys(), f'Unknown data and labeling {args.data=}.'
 
