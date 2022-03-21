@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pickle
 
-def get_ml_data_traditional(labeling_name, target, kind='buglevel', drop_columns=None):
+def get_ml_data_traditional(labeling_name, target, kind='buglevel', drop_columns=False):
     assert ('szz' not in labeling_name) or kind == 'commitlevel', 'SZZ labeling only allows commitlevel.'
     assert ('szz' not in labeling_name) or target == 'performance', 'SZZ labeling only allows performance target.'
 
@@ -34,7 +34,7 @@ def get_ml_data_traditional(labeling_name, target, kind='buglevel', drop_columns
 
     y = np.array(features['target'])
     if drop_columns:
-        features = features.drop(drop_columns(features.columns), axis=1, errors='ignore')
+        features = features.drop([c for c in features.columns if 'delta_' in c or 'min_' in c or 'max_' in c or 'sum_' in c], axis=1, errors='ignore')
     X = features.fillna(0).drop('target', axis=1)
     X = np.array(X)
     print(f'{X.shape=}\n')

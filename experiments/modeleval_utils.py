@@ -10,7 +10,7 @@ from experiments.hyperparam_tuning import *
 
 output_dir = 'experiments/results'
 
-def get_results(data, feature_type, target, scoring, model):
+def get_results(output_dir, data, feature_type, target, scoring, model):
     path = os.path.join(output_dir, f'{data}_{feature_type}_{target}_{scoring}_{model}.csv')
     results = pd.read_csv(path, index_col=0)
     results = results.replace({np.nan: None})
@@ -20,14 +20,12 @@ def get_results(data, feature_type, target, scoring, model):
 data_map = {}
 
 data_map['traditional'] = {
-    'bugbug_buglevel': lambda target: get_ml_data_traditional('bugbug', target, kind='buglevel'),
-    'bugbug_szz': lambda target: get_ml_data_traditional('bugbug_szz', target, kind='commitlevel'),
-    'fixed_defect_szz': lambda target: get_ml_data_traditional('fixed_defect_szz', target, kind='commitlevel')
+    'bugbug_buglevel': lambda target, drop_columns=False: get_ml_data_traditional('bugbug', target, kind='buglevel', drop_columns=drop_columns),
+    'fixed_defect_szz': lambda target, drop_columns=False: get_ml_data_traditional('fixed_defect_szz', target, kind='commitlevel', drop_columns=drop_columns)
 }
 data_map['bow'] = {
-    'bugbug_buglevel': lambda target: get_ml_data_bow('bugbug', target, kind='buglevel'),
-    'bugbug_szz': lambda target: get_ml_data_bow('bugbug_szz', target, kind='commitlevel'),
-    'fixed_defect_szz': lambda target: get_ml_data_bow('fixed_defect_szz', target, kind='commitlevel')
+    'bugbug_buglevel': lambda target, _=False: get_ml_data_bow('bugbug', target, kind='buglevel'),
+    'fixed_defect_szz': lambda target, _=False: get_ml_data_bow('fixed_defect_szz', target, kind='commitlevel')
 }
 
 def get_params(results):
@@ -84,7 +82,7 @@ def get_best_f1_threshold(clf, X, y):
     amax = F1.argmax()
     return T[amax], F1[amax]
 
-def get_tpot_pipeline(data, feature_type, target, scoring):
+def get_tpot_pipeline(output_dir, data, feature_type, target, scoring):
     import re
     from tpot.export_utils import set_param_recursive
     path = os.path.join(output_dir, f'{data}_{feature_type}_{target}_{scoring}_tpot_exported_pipeline.py')
@@ -117,13 +115,13 @@ def get_tpot_pipeline(data, feature_type, target, scoring):
         return exported_pipeline, None, score
 
 
-def get_pipeline(data, feature_type, target, scoring, model):
+def get_pipeline(output_dir, data, feature_type, target, scoring, model):
     if model == 'dummy':
         return model_map[model](), None, None
     if model == 'tpot':
-        return get_tpot_pipeline(data, feature_type, target, scoring)
+        return get_tpot_pipeline(output_dir, data, feature_type, target, scoring)
         
-    results = get_results(data, feature_type, target, scoring, model)
+    results = get_results(output_dir, data, feature_type, target, scoring, model)
     best_result = results.iloc[0]
     params = get_params(results)
     best_params = get_best_params(model, params)
@@ -139,7 +137,8 @@ def get_pipeline(data, feature_type, target, scoring, model):
 from matplotlib.lines import Line2D
 def plot_roc_auc_rec_prec_for_all_models(target, data, feature_type, scoring,
     fitted_pipelines, X_train, X_test, y_train, y_test, split='test',
-    save=False, show=True, figsize=(12,8), ylim=[0,1], path=None, roc_fig=None, roc_ax=None, pr_fig=None, pr_ax=None, colors=None, linestyles=None):
+    save=False, show=True, figsize=(12,8), ylim=[0,1], path=None, output_dir=None,
+    roc_fig=None, roc_ax=None, pr_fig=None, pr_ax=None, colors=None, linestyles=None):
 
     if split == 'test':
         _X = X_test
@@ -210,15 +209,17 @@ def plot_roc_auc_rec_prec_for_all_models(target, data, feature_type, scoring,
     pr_ax.legend(handles=handles)
 
     roc_fig.tight_layout()
+    
+    output_dir = "experiments/plots/" if not output_dir else output_dir
     if save:
         if not path:
-            path = f'experiments/plots/{data}_{feature_type}_{target}_{scoring}_roc_{split}.pdf'
+            path = os.path.join(output_dir, f'plots/{data}_{feature_type}_{target}_{scoring}_roc_{split}.pdf')
         roc_fig.savefig(path + f'_roc_{split}.pdf')
 
     pr_fig.tight_layout()
     if save:
         if not path:
-            path = f'experiments/plots/{data}_{feature_type}_{target}_{scoring}_pr_{split}.pdf'
+            path = os.path.join(output_dir, f'plots/{data}_{feature_type}_{target}_{scoring}_pr_{split}.pdf')
         pr_fig.savefig(path + f'_pr_{split}.pdf')
     
     if show:

@@ -241,7 +241,7 @@ if __name__ == '__main__':
     print(f'\n{args=}\n')
 
     get_ml_data = get_ml_data_traditional if args.features == 'traditional' else get_ml_data_bow
-    drop_columns = lambda columns: [c for c in columns if 'delta_' in c or 'min_' in c or 'max_' in c or 'sum_' in c] if args.drop_features and args.features == 'traditional' else None
+    drop_columns = args.drop_features and args.features == 'traditional'
 
     data_map = {
         'bugbug_buglevel': lambda target: get_ml_data('bugbug', target, kind='buglevel', drop_columns=drop_columns),
