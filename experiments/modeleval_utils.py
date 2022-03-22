@@ -213,13 +213,13 @@ def plot_roc_auc_rec_prec_for_all_models(target, data, feature_type, scoring,
     output_dir = "experiments/plots/" if not output_dir else output_dir
     if save:
         if not path:
-            path = os.path.join(output_dir, f'plots/{data}_{feature_type}_{target}_{scoring}_roc_{split}.pdf')
+            path = os.path.join(output_dir, f'plots/{data}_{feature_type}_{target}_{scoring}')
         roc_fig.savefig(path + f'_roc_{split}.pdf')
 
     pr_fig.tight_layout()
     if save:
         if not path:
-            path = os.path.join(output_dir, f'plots/{data}_{feature_type}_{target}_{scoring}_pr_{split}.pdf')
+            path = os.path.join(output_dir, f'plots/{data}_{feature_type}_{target}_{scoring}')
         pr_fig.savefig(path + f'_pr_{split}.pdf')
     
     if show:
