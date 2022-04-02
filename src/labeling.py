@@ -239,7 +239,7 @@ def get_defects_and_fixes():
     with open('data/bugbug/bugs.json', encoding="utf-8") as f:
         for line in tqdm(f, desc='Get defects and fixes'):
             bug = json.loads(line)
-            if (bug['product'] !='"Invalid Bugs' and
+            if (bug['product'] != 'Invalid Bugs' and
                 bug['resolution'] == 'FIXED' and
                 bug['type'] == 'defect'):
 
