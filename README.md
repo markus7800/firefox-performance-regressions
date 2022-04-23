@@ -1,6 +1,6 @@
 # Firefox Performance Regression Prediction
 
-This repository contains source code to reproduce the results of the thesis *Machine Learning for Interactive
+This repository contains source code to reproduce the results of the Master's thesis *Machine Learning for Interactive
 Performance Prediction* available [here]().
 
 ## Abstract
@@ -30,7 +30,7 @@ Here is an overview over the project structure.
 
 Note that some folders/files are only generated when following the step to reproduce the results below.
 
-The data and results used in the thesis/paper can be found [here]().
+The data and results used in the thesis/paper can be found [here](https://drive.google.com/drive/folders/1R_z0mZklHMD9NwP4kLRRxV87ZoI9b3zS?usp=sharing).
 
 ```
 root

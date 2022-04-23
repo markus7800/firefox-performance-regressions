@@ -1,0 +1,1 @@
+zip -r data_and_results.zip data/ experiments/ -x data/mozilla-central**\* data/mozilla-central-git**\* data/bundle.hg *.ipynb
