@@ -8,6 +8,9 @@ from collections import defaultdict
 import argparse
 import sys
 import copy
+import os.path
+
+from src.utils import *
 
 def get_all_commits():
     def is_wptsync(commit):
@@ -258,6 +261,11 @@ def get_defects_and_fixes():
 
 
 def get_hg_git_mapping():
+    if os.path.exists('data/labeling/hg_to_git.json') and os.path.exists('data/labeling/git_to_hg.json'):
+        hg_to_git = read_data_from_json('data/labeling/hg_to_git.json')
+        git_to_hg = read_data_from_json('data/labeling/git_to_hg.json')
+        return hg_to_git, git_to_hg
+
     print('Get hg to git mapping ...', end='\r')
     git_repo = 'data/mozilla-central-git'
 
@@ -275,6 +283,10 @@ def get_hg_git_mapping():
         git_hash, _, hg_hash = line.partition(' ')
         hg_to_git[hg_hash] = git_hash
         git_to_hg[git_hash] = hg_hash
+
+    write_json_to_file(hg_to_git, 'data/labeling/hg_to_git.json')
+    write_json_to_file(git_to_hg, 'data/labeling/git_to_hg.json')
+    
     print('Get hg to git mapping ... Done.')
 
     return hg_to_git, git_to_hg

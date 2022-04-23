@@ -1,5 +1,6 @@
 data/
 archive/
+trash/
 
 experiments/results*
 experiments/plots*
